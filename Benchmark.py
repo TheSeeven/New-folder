@@ -1,18 +1,65 @@
-from numpy.random import randint, default_rng
-from time import perf_counter
-from multiprocessing import Process, freeze_support, cpu_count
+from numpy.random import randint, default_rng, set_state
+from time import perf_counter, sleep
+from multiprocessing import Lock, Process, freeze_support, Value
+from GUI import Interface
+
 import os
 import psutil
 
+TEST_REPETITION = 3  # GUI
+TEST_DIFICULTY = 50000  # GUI
+TEST_SIZE = 5000  # GUI
+NUMBER_OF_CORES = 1  # GUI
+WORKING = Value('b', False)
 
-TEST_LENGTH = 5
-TEST_DIFICULTY = 50000
-NUMBER_OF_CORES = 1
+GUI = Interface()
+
+
+class ProcessHandler:
+    def __init__(self):
+        self.job = None
+        self.done = Value('b', False)
+        self.elapsed = Value('d', 0)
+
+    def start(self):
+        self.job.start()
+
+    def setProcess(self, process):
+        self.job = process
+
+    def solveBenchmark(self, TESTS, working, lock):
+        while True:
+            with lock:
+                if not working.value:
+                    break
+        t1 = perf_counter()
+        for i in range(TEST_REPETITION):
+            TESTS[0].solve()
+            TESTS[1].solve()
+            TESTS[2].solve()
+        self.elapsed.value = perf_counter()-t1
+        self.done.value = True
+
+
+def setState():
+    global picture, WORKING
+
+    if not WORKING.value:
+        GUI.canvas.configure(image=GUI.pictureBusy)
+        GUI.canvas.photo_ref = GUI.pictureBusy
+    else:
+        WORKING = Value('b', False)
+        GUI.canvas.configure(image=GUI.pictureReady)
+        GUI.canvas.photo_ref = GUI.pictureReady
+    GUI.interface.update_idletasks()
+
+
+GUI.interface.bind("<Return>", set_state)
 
 
 class Test:
     def __init__(self):
-        self.length = 2000
+        self.size = TEST_SIZE
 
 
 class FloatingPointsBechmark(Test):
@@ -21,7 +68,7 @@ class FloatingPointsBechmark(Test):
         self.arr = []
 
     def prepare(self):
-        self.arr = default_rng().random((self.length,))
+        self.arr = default_rng().random((self.size,))
 
     def solve(self):
         for i in range(TEST_DIFICULTY):
@@ -34,7 +81,7 @@ class IntegersPointsBenchmark(Test):
         self.arr = []
 
     def prepare(self):
-        self.arr = randint(2147483647, size=self.length)
+        self.arr = randint(2147483647, size=self.size)
 
     def solve(self):
         for i in range(TEST_DIFICULTY):
@@ -47,24 +94,17 @@ class MatrixAditionBenchmark(Test):
         self.matrix = []
 
     def prepare(self):
-        self.matrix = [default_rng().random((self.length,))
-                       for b in range(self.length)]
+        self.matrix = [default_rng().random((self.size,))
+                       for b in range(self.size)]
 
     def solve(self):
         for i in range(TEST_DIFICULTY):
             temp = (self.matrix + self.matrix) * 3
 
 
-def solveBenchmark(TESTS):
-    for i in range(TEST_LENGTH):
-        TESTS[0].solve()
-        TESTS[1].solve()
-        TESTS[2].solve()
-
-
 def memoryUsage():
-    print("RAM used: ", psutil.Process(
-        os.getpid()).memory_info().rss / 1024 ** 2)
+    return psutil.Process(
+        os.getpid()).memory_info().rss / 1024 ** 2
 
 
 def generateBenchmark():
@@ -91,24 +131,55 @@ def generateBenchmark():
     return TESTS
 
 
-if __name__ == '__main__':
+def ActiveProceses(processList, lock):
+    with lock:
+        for i in processList:
+            if not i.done.value:
+                return True
+    return False
 
-    freeze_support()
-    print("Total number of cores: ", cpu_count())
-    NUMBER_OF_CORES = int(input("Enter number of desired cores: "))
 
+def getMaxTime(processList):
+    result = 0.0
+    for i in processList:
+        if i.elapsed.value > result:
+            result = i.elapsed.value
+    return result
+
+
+# sa bag chestia asta intr-un thread global cu optiunea sa ii dau si kill
+def StartBenchmark(repetition, dificulty, size, cores):
+
+    global NUMBER_OF_CORES, TEST_REPETITION, TEST_DIFICULTY, TEST_SIZE, WORKING
+    NUMBER_OF_CORES = cores
+    TEST_REPETITION = repetition
+    TEST_DIFICULTY = dificulty
+    TEST_SIZE = size
     TESTS = generateBenchmark()
-    print("Starting test...")
+    mem = memoryUsage() * float(cores)
+
+    setState()
+
+    lock = Lock()
     processes = []
     for i in range(NUMBER_OF_CORES):
-        processes.append(Process(target=solveBenchmark, args=(TESTS,)))
-    memoryUsage()
-    t1 = perf_counter()
+        processes.append(ProcessHandler())
+        processes[i].setProcess(
+            Process(target=processes[i].solveBenchmark, args=(TESTS, WORKING, lock)))
+
     for i in processes:
         i.start()
-    for i in processes:
-        i.join()
-    t2 = perf_counter()-t1
-    print("Total time: ", t2)
-    print("Finish!")
-    input("Press enter to exit...")
+    with lock:
+        WORKING = Value('b', True)
+    while ActiveProceses(processes, lock):
+        sleep(1)
+    setState()
+    GUI.results.configure(text="Benchmark elapsed in {f} seconds and used {ram}".format(
+        f='{0:.4f}'.format(getMaxTime(processes)), ram=str(mem)))
+
+
+GUI.set_button(lambda: StartBenchmark(
+    int(GUI.spinbox_repetition.get()), int(GUI.spinbox_dificulty.get()), int(GUI.spinbox_size.get()), int(GUI.spinbox_cores.get())))
+if __name__ == '__main__':
+    freeze_support()
+    GUI.interface.mainloop()
