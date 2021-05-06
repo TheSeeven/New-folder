@@ -47,10 +47,12 @@ def setState():
     if not WORKING.value:
         GUI.canvas.configure(image=GUI.pictureBusy)
         GUI.canvas.photo_ref = GUI.pictureBusy
+        GUI.interface.iconbitmap(GUI.icon_busy)
     else:
         WORKING = Value('b', False)
         GUI.canvas.configure(image=GUI.pictureReady)
         GUI.canvas.photo_ref = GUI.pictureReady
+        GUI.interface.iconbitmap(GUI.icon_ready)
     GUI.interface.update_idletasks()
 
 
@@ -149,16 +151,15 @@ def getMaxTime(processList):
 
 # sa bag chestia asta intr-un thread global cu optiunea sa ii dau si kill
 def StartBenchmark(repetition, dificulty, size, cores):
-
+    GUI.label_result.configure(text="Test results:")
     global NUMBER_OF_CORES, TEST_REPETITION, TEST_DIFICULTY, TEST_SIZE, WORKING
     NUMBER_OF_CORES = cores
     TEST_REPETITION = repetition
     TEST_DIFICULTY = dificulty
     TEST_SIZE = size
+    setState()
     TESTS = generateBenchmark()
     mem = memoryUsage() * float(cores)
-
-    setState()
 
     lock = Lock()
     processes = []
@@ -172,14 +173,18 @@ def StartBenchmark(repetition, dificulty, size, cores):
     with lock:
         WORKING = Value('b', True)
     while ActiveProceses(processes, lock):
-        sleep(1)
+        sleep(0.1)
     setState()
-    GUI.results.configure(text="Benchmark elapsed in {f} seconds and used {ram}".format(
-        f='{0:.4f}'.format(getMaxTime(processes)), ram=str(mem)))
+
+    textResult = GUI.label_result.cget("text")+" Benchmark elapsed in {f} seconds and used {ram}".format(
+        f='{0:.4f}'.format(getMaxTime(processes)), ram=str(mem))
+
+    GUI.label_result.configure(text=textResult)
 
 
-GUI.set_button(lambda: StartBenchmark(
-    int(GUI.spinbox_repetition.get()), int(GUI.spinbox_dificulty.get()), int(GUI.spinbox_size.get()), int(GUI.spinbox_cores.get())))
+GUI.set_button(lambda: StartBenchmark(int(GUI.spinbox_repetition.get()), int(
+    GUI.spinbox_dificulty.get()), int(GUI.spinbox_size.get()), int(GUI.spinbox_cores.get())))
 if __name__ == '__main__':
+    GUI.interface.iconbitmap(GUI.icon_ready)
     freeze_support()
     GUI.interface.mainloop()
