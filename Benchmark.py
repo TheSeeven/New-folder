@@ -36,9 +36,9 @@ class ProcessHandler:
     def solveBenchmark(self, TESTS, working, lock):
         while True:
             with lock:
-                if working.value == 1:
+                if working.value:
                     break
-            sleep(2)
+            sleep(0.2)
         t1 = perf_counter()
         for i in range(TEST_REPETITION):
             TESTS[0].solve()
@@ -148,8 +148,11 @@ def generateBenchmark():
         generateIntegerTest()
         generateFloatingTest()
         generateMatrixTest()
+
     except:
-        pass
+        return
+    finally:
+        return
 
 
 def ActiveProceses(processList, lock):
@@ -188,7 +191,7 @@ def StartBenchmark(stop):
         if EXIT_FLAG:
             TESTS = None
             EXIT_FLAG = False
-            os.sys.exit()
+            return
         sleep(0.8)
     mem = (memoryUsage() * float(NUMBER_OF_CORES)) - mem_initial
 
@@ -207,27 +210,26 @@ def StartBenchmark(stop):
         else:
             for j in processes:
                 j.kill()
-            WORKING.value = False
             EXIT_FLAG = False
-            os.sys.exit()
+            return
     for i in processes:
-        if not EXIT_FLAG:
-            i.start()
-        else:
+        if EXIT_FLAG:
             for j in processes:
                 j.kill()
-            WORKING.value = False
             EXIT_FLAG = False
-            os.sys.exit()
+            return
+        i.start()
+        sleep(0.2)
 
     with lock:
         WORKING.value = True
 
     while ActiveProceses(processes, lock):
         if EXIT_FLAG:
-            WORKING.value = False
             EXIT_FLAG = False
-            os.sys.exit()
+            for j in processes:
+                j.kill()
+            return
         sleep(0.1)
     maxTime = getMaxTime(processes)
 
@@ -247,24 +249,23 @@ def BenchmarkButton():
     global BENCHMARK_THREAD, EXIT_FLAG, WORKING
     if BENCHMARK_THREAD is not None:
         if not BENCHMARK_THREAD.is_alive():
-
+            setState()
             BENCHMARK_THREAD = threading.Thread(
                 target=StartBenchmark, args=(lambda: EXIT_FLAG,)
             )
             BENCHMARK_THREAD.start()
-            setState()
         else:
+            WORKING.value = True
             EXIT_FLAG = True
-            WORKING = Value("b", True)
+            setState()
             while BENCHMARK_THREAD.is_alive():
                 pass
-            setState()
             BENCHMARK_THREAD = None
     else:
+        setState()
         BENCHMARK_THREAD = threading.Thread(
             target=StartBenchmark, args=(lambda: EXIT_FLAG,)
         )
-        setState()
         BENCHMARK_THREAD.start()
 
 
