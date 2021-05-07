@@ -3,10 +3,11 @@ from numpy.random import randint, default_rng, set_state
 from time import perf_counter, sleep
 from multiprocessing import Lock, Process, freeze_support, Value
 from GUI import Interface
-import threading
+import threading, ctypes
 
 import os
 import psutil
+
 
 TEST_REPETITION = 3  # GUI
 TEST_DIFICULTY = 50000  # GUI
@@ -35,8 +36,9 @@ class ProcessHandler:
     def solveBenchmark(self, TESTS, working, lock):
         while True:
             with lock:
-                if not working.value:
+                if working.value == 1:
                     break
+            sleep(2)
         t1 = perf_counter()
         for i in range(TEST_REPETITION):
             TESTS[0].solve()
@@ -63,7 +65,7 @@ def setState():
         GUI.button_start.configure(text="Stop Benchmark")
         GUI.interface.title("ProBenchBurner - Busy")
     else:
-        WORKING = Value("b", False)
+        WORKING.value = False
         GUI.canvas.configure(image=GUI.pictureReady)
         GUI.canvas.photo_ref = GUI.pictureReady
         GUI.interface.iconbitmap(GUI.icon_ready)
@@ -126,26 +128,28 @@ def memoryUsage():
 
 def generateBenchmark():
     global TESTS
-    TESTS = []
+    try:
 
-    def generateFloatingTest():
-        _TEST_FLOATING_POINTS = FloatingPointsBechmark()
-        _TEST_FLOATING_POINTS.prepare()
-        TESTS.append(_TEST_FLOATING_POINTS)
+        def generateFloatingTest():
+            _TEST_FLOATING_POINTS = FloatingPointsBechmark()
+            _TEST_FLOATING_POINTS.prepare()
+            TESTS.append(_TEST_FLOATING_POINTS)
 
-    def generateIntegerTest():
-        _TEST_INTEGERS_POINTS = IntegersPointsBenchmark()
-        _TEST_INTEGERS_POINTS.prepare()
-        TESTS.append(_TEST_INTEGERS_POINTS)
+        def generateIntegerTest():
+            _TEST_INTEGERS_POINTS = IntegersPointsBenchmark()
+            _TEST_INTEGERS_POINTS.prepare()
+            TESTS.append(_TEST_INTEGERS_POINTS)
 
-    def generateMatrixTest():
-        _TEST_MATRIX_ADD = MatrixAditionBenchmark()
-        _TEST_MATRIX_ADD.prepare()
-        TESTS.append(_TEST_MATRIX_ADD)
+        def generateMatrixTest():
+            _TEST_MATRIX_ADD = MatrixAditionBenchmark()
+            _TEST_MATRIX_ADD.prepare()
+            TESTS.append(_TEST_MATRIX_ADD)
 
-    generateIntegerTest()
-    generateFloatingTest()
-    generateMatrixTest()
+        generateIntegerTest()
+        generateFloatingTest()
+        generateMatrixTest()
+    except:
+        pass
 
 
 def ActiveProceses(processList, lock):
@@ -165,32 +169,31 @@ def getMaxTime(processList):
 
 
 # sa bag chestia asta intr-un thread global cu optiunea sa ii dau si kill
-def StartBenchmark(repetition, dificulty, size, cores, stop):
-    global EXIT_FLAG, TESTS
-    mem_initial = memoryUsage() * float(cores)
+def StartBenchmark(stop):
+    global EXIT_FLAG, TESTS, NUMBER_OF_CORES, TEST_REPETITION, TEST_DIFICULTY, TEST_SIZE, WORKING
     GUI.label_result.configure(text="Test results:")
-    global NUMBER_OF_CORES, TEST_REPETITION, TEST_DIFICULTY, TEST_SIZE, WORKING
-    NUMBER_OF_CORES = cores
-    TEST_REPETITION = repetition
-    TEST_DIFICULTY = dificulty
-    TEST_SIZE = size
+    NUMBER_OF_CORES = int(GUI.spinbox_cores.get())
+    TEST_REPETITION = int(GUI.spinbox_repetition.get())
+    TEST_DIFICULTY = int(GUI.spinbox_dificulty.get())
+    TEST_SIZE = int(GUI.spinbox_size.get())
+    TESTS = []
+    mem_initial = memoryUsage() * float(NUMBER_OF_CORES)
+
     TestsGenerator = threading.Thread(
-        target=generateBenchmark,
+        target=generateBenchmark, name="BenchmarkGenerator", daemon=True
     )
 
     TestsGenerator.start()
-    print("tests generator started!")
     while TestsGenerator.is_alive():
         if EXIT_FLAG:
+            TESTS = None
             EXIT_FLAG = False
             os.sys.exit()
         sleep(0.8)
-    print("tests generated!")
-    mem = (memoryUsage() * float(cores)) - mem_initial
+    mem = (memoryUsage() * float(NUMBER_OF_CORES)) - mem_initial
 
     lock = Lock()
     processes = []
-    print("Generating proceses!!")
     for i in range(NUMBER_OF_CORES):
         if not EXIT_FLAG:
             processes.append(ProcessHandler())
@@ -204,87 +207,68 @@ def StartBenchmark(repetition, dificulty, size, cores, stop):
         else:
             for j in processes:
                 j.kill()
+            WORKING.value = False
             EXIT_FLAG = False
             os.sys.exit()
-    print("Proceses generated!!")
     for i in processes:
         if not EXIT_FLAG:
             i.start()
         else:
             for j in processes:
                 j.kill()
+            WORKING.value = False
             EXIT_FLAG = False
             os.sys.exit()
-    print("Proceses started!")
+
     with lock:
-        WORKING = Value("b", True)
-    print("Waiting to finish...")
+        WORKING.value = True
+
     while ActiveProceses(processes, lock):
         if EXIT_FLAG:
+            WORKING.value = False
             EXIT_FLAG = False
             os.sys.exit()
         sleep(0.1)
-    setState()
+    maxTime = getMaxTime(processes)
 
     textResult = GUI.label_result.cget(
         "text"
     ) + " Benchmark elapsed in {f} seconds and used {ram}".format(
-        f="{0:.4f}".format(getMaxTime(processes)), ram=str(mem)
+        f="{0:.4f}".format(maxTime), ram=str(mem)
     )
+    setState()
 
     GUI.label_result.configure(text=textResult)
     EXIT_FLAG = False
+    WORKING.value = False
 
 
-def BenchmarkButton(repetition, dificulty, size, cores):
+def BenchmarkButton():
     global BENCHMARK_THREAD, EXIT_FLAG, WORKING
     if BENCHMARK_THREAD is not None:
         if not BENCHMARK_THREAD.is_alive():
+
             BENCHMARK_THREAD = threading.Thread(
-                target=StartBenchmark,
-                args=(
-                    repetition,
-                    dificulty,
-                    size,
-                    cores,
-                    lambda: EXIT_FLAG,
-                ),
+                target=StartBenchmark, args=(lambda: EXIT_FLAG,)
             )
             BENCHMARK_THREAD.start()
             setState()
-            print("Thread started!")
         else:
             EXIT_FLAG = True
             WORKING = Value("b", True)
             while BENCHMARK_THREAD.is_alive():
                 pass
-            print("Thread stopped!")
             setState()
             BENCHMARK_THREAD = None
     else:
         BENCHMARK_THREAD = threading.Thread(
-            target=StartBenchmark,
-            args=(
-                repetition,
-                dificulty,
-                size,
-                cores,
-                lambda: EXIT_FLAG,
-            ),
+            target=StartBenchmark, args=(lambda: EXIT_FLAG,)
         )
         setState()
         BENCHMARK_THREAD.start()
-        print("Thread started!")
 
 
-GUI.set_button(
-    lambda: BenchmarkButton(
-        int(GUI.spinbox_repetition.get()),
-        int(GUI.spinbox_dificulty.get()),
-        int(GUI.spinbox_size.get()),
-        int(GUI.spinbox_cores.get()),
-    )
-)
+GUI.set_button(lambda: BenchmarkButton())
 
 if __name__ == "__main__":
     GUI.interface.iconbitmap(GUI.icon_ready)
