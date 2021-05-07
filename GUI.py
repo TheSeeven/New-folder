@@ -1,9 +1,6 @@
-from multiprocessing.spawn import freeze_support
-
 import tkinter
 import PIL
 from PIL import ImageTk
-from tkinter import *
 
 
 class Interface:
@@ -13,17 +10,19 @@ class Interface:
         self.interface.configure(background="black")
         self.interface.resizable(False, False)
 
-        self.pictureReady = ImageTk.PhotoImage(PIL.Image.open("cpu_ready.png"))
-        self.pictureBusy = ImageTk.PhotoImage(PIL.Image.open("cpu_busy.png"))
+        self.pictureReady = ImageTk.PhotoImage(
+            PIL.Image.open("resources\\cpu_ready.png")
+        )
+        self.pictureBusy = ImageTk.PhotoImage(PIL.Image.open("resources\\cpu_busy.png"))
 
-        self.icon_ready = tkinter.PhotoImage(r"cpu_icon_ready.ico")
-        self.icon_busy = tkinter.PhotoImage(r"cpu_icon_busy.ico")
+        self.icon_ready = tkinter.PhotoImage(r"resources\\cpu_icon_ready.ico")
+        self.icon_busy = tkinter.PhotoImage(r"resources\\cpu_icon_busy.ico")
 
-        self.canvas = Label(
+        self.canvas = tkinter.Label(
             self.interface, image=self.pictureReady, padx=7, pady=5, background="black"
         )
 
-        self.label_result = Label(
+        self.label_result = tkinter.Label(
             self.interface,
             text="Test results:",
             padx=7,
@@ -110,9 +109,9 @@ class Interface:
 
         self.button_start = None
 
-        Grid.columnconfigure(self.interface, 0, weight=1)
+        tkinter.Grid.columnconfigure(self.interface, 0, weight=1)
         for i in range(0, 10):
-            Grid.rowconfigure(self.interface, i, weight=1)
+            tkinter.Grid.rowconfigure(self.interface, i, weight=1)
 
     def set_button(self, command):
         self.button_start = tkinter.Button(
@@ -123,3 +122,7 @@ class Interface:
             foreground="#fcfffd",
         )
         self.button_start.grid(row=10, column=0, sticky="nsew", padx=7, pady=5)
+
+    def invisible(self):
+        self.interface.withdraw()
+        self.interface = None
