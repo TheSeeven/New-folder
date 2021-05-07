@@ -9,6 +9,7 @@ from tkinter import *
 class Interface:
     def __init__(self):
         self.interface = tkinter.Tk()
+        self.interface.title("ProBenchBurner - Idle")
         self.interface.configure(background="black")
         self.interface.resizable(False, False)
 

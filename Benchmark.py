@@ -3,7 +3,7 @@ from numpy.random import randint, default_rng, set_state
 from time import perf_counter, sleep
 from multiprocessing import Lock, Process, freeze_support, Value
 from GUI import Interface
-import threading, signal
+import threading
 
 import os
 import psutil
@@ -61,6 +61,7 @@ def setState():
         GUI.interface.iconbitmap(GUI.icon_busy)
         GUI.button_start.configure(background="#a31515")
         GUI.button_start.configure(text="Stop Benchmark")
+        GUI.interface.title("ProBenchBurner - Busy")
     else:
         WORKING = Value("b", False)
         GUI.canvas.configure(image=GUI.pictureReady)
@@ -68,6 +69,7 @@ def setState():
         GUI.interface.iconbitmap(GUI.icon_ready)
         GUI.button_start.configure(background="#1f7839")
         GUI.button_start.configure(text="Start Benchmark")
+        GUI.interface.title("ProBenchBurner - Idle")
     GUI.interface.update_idletasks()
 
 
@@ -175,12 +177,14 @@ def StartBenchmark(repetition, dificulty, size, cores, stop):
     TestsGenerator = threading.Thread(
         target=generateBenchmark,
     )
+
     TestsGenerator.start()
     print("tests generator started!")
     while TestsGenerator.is_alive():
         if EXIT_FLAG:
             EXIT_FLAG = False
             os.sys.exit()
+        sleep(0.8)
     print("tests generated!")
     mem = (memoryUsage() * float(cores)) - mem_initial
 
@@ -191,7 +195,11 @@ def StartBenchmark(repetition, dificulty, size, cores, stop):
         if not EXIT_FLAG:
             processes.append(ProcessHandler())
             processes[i].setProcess(
-                Process(target=processes[i].solveBenchmark, args=(TESTS, WORKING, lock))
+                Process(
+                    target=processes[i].solveBenchmark,
+                    args=(TESTS, WORKING, lock),
+                    name="Core - {nr}".format(nr=str(i)),
+                )
             )
         else:
             for j in processes:
@@ -277,6 +285,7 @@ GUI.set_button(
         int(GUI.spinbox_cores.get()),
     )
 )
+
 if __name__ == "__main__":
     GUI.interface.iconbitmap(GUI.icon_ready)
     freeze_support()
